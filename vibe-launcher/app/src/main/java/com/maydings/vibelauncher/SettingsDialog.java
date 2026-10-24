@@ -25,10 +25,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 /**
- * Vibe Launcher settings on two tabs. General: tiles per row and updates (Updater). API keys: the TMDB,
- * YouTube and Plex keys, each with an (i) explaining it, SmartTube to install or sign in to (the key-free
- * way to YouTube backdrops), and a QR code for pasting the keys from a phone (PhoneLink). Save and Cancel
- * serve both tabs.
+ * Vibe Launcher settings on three tabs. General: tiles per row and updates (Updater). Home: weather
+ * provider (Open-Meteo / OpenWeatherMap), city, and local wallpaper (one photo or a folder slideshow)
+ * with a built-in TV picker. API keys: the TMDB, YouTube and Plex keys, each with an (i) explaining it,
+ * SmartTube to install or sign in to (the key-free way to YouTube backdrops), and a QR code for pasting
+ * the keys from a phone (PhoneLink). Save and Cancel serve all tabs.
  */
 final class SettingsDialog {
 
@@ -64,14 +65,93 @@ final class SettingsDialog {
             window.setGravity(Gravity.CENTER);
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
             // The dialog theme caps the width; the fields and the QR code sit side by side.
-            window.setLayout((int) (620 * density), ViewGroup.LayoutParams.WRAP_CONTENT);
+            window.setLayout((int) (680 * density), ViewGroup.LayoutParams.WRAP_CONTENT);
         }
         View cancel = panel.findViewById(R.id.cancel), save = panel.findViewById(R.id.save);
         View tmdbInfo = panel.findViewById(R.id.tmdbInfo), youtubeInfo = panel.findViewById(R.id.youtubeInfo),
                 plexInfo = panel.findViewById(R.id.plexInfo);
+        View owmInfo = panel.findViewById(R.id.owmInfo);
         tmdbInfo.setOnClickListener(v -> showInfo(activity, v, R.string.tmdb_info));
         youtubeInfo.setOnClickListener(v -> showInfo(activity, v, R.string.youtube_info));
         plexInfo.setOnClickListener(v -> showInfo(activity, v, R.string.plex_info));
+        owmInfo.setOnClickListener(v -> showInfo(activity, v, R.string.owm_info));
+        // Home tab: weather provider + OWM key + city, wallpaper mode + built-in picker.
+        EditText owmKey = panel.findViewById(R.id.owmKey);
+        EditText weatherCity = panel.findViewById(R.id.weatherCity);
+        String savedOwm = settings.openWeatherMapKey();
+        owmKey.setText(mask(savedOwm));
+        owmKey.setSelectAllOnFocus(true);
+        weatherCity.setText(settings.weatherCity());
+        String[] weatherProvider = {settings.weatherProvider()};
+        View weatherOpenMeteo = panel.findViewById(R.id.weatherOpenMeteo);
+        View weatherOwm = panel.findViewById(R.id.weatherOwm);
+        Runnable markWeather = () -> {
+            boolean owm = WeatherService.isOpenWeatherMap(weatherProvider[0]);
+            weatherOpenMeteo.setSelected(!owm);
+            weatherOwm.setSelected(owm);
+            owmKey.setEnabled(owm);
+            owmKey.setAlpha(owm ? 1f : 0.45f);
+        };
+        weatherOpenMeteo.setOnClickListener(v -> {
+            weatherProvider[0] = WeatherService.openMeteoId();
+            markWeather.run();
+        });
+        weatherOwm.setOnClickListener(v -> {
+            weatherProvider[0] = WeatherService.openWeatherMapId();
+            markWeather.run();
+        });
+        markWeather.run();
+        int[] wallpaperMode = {settings.wallpaperMode()};
+        String[] wallpaperUri = {settings.wallpaperUri()};
+        String[] wallpaperFolder = {settings.wallpaperFolder()};
+        String[] wallpaperLabel = {settings.wallpaperLabel()};
+        View wallpaperOff = panel.findViewById(R.id.wallpaperOff);
+        View wallpaperSingle = panel.findViewById(R.id.wallpaperSingle);
+        View wallpaperSlide = panel.findViewById(R.id.wallpaperSlide);
+        TextView wallpaperSummary = panel.findViewById(R.id.wallpaperSummary);
+        TextView pickWallpaper = panel.findViewById(R.id.pickWallpaper);
+        View[] wallpaperPills = {wallpaperOff, wallpaperSingle, wallpaperSlide};
+        Runnable showWallpaperSummary = () -> {
+            int mode = wallpaperMode[0];
+            for (int i = 0; i < wallpaperPills.length; i++) wallpaperPills[i].setSelected(i == mode);
+            pickWallpaper.setEnabled(mode != WallpaperController.MODE_OFF);
+            pickWallpaper.setAlpha(mode == WallpaperController.MODE_OFF ? 0.45f : 1f);
+            if (mode == WallpaperController.MODE_OFF) {
+                wallpaperSummary.setText(R.string.wallpaper_none);
+            } else if (mode == WallpaperController.MODE_SINGLE) {
+                wallpaperSummary.setText(wallpaperLabel[0].isEmpty()
+                        ? activity.getString(R.string.wallpaper_none)
+                        : activity.getString(R.string.wallpaper_file, wallpaperLabel[0]));
+            } else {
+                wallpaperSummary.setText(wallpaperLabel[0].isEmpty()
+                        ? activity.getString(R.string.wallpaper_none)
+                        : activity.getString(R.string.wallpaper_folder, wallpaperLabel[0]));
+            }
+        };
+        for (int i = 0; i < wallpaperPills.length; i++) {
+            int mode = i;
+            wallpaperPills[i].setOnClickListener(v -> {
+                wallpaperMode[0] = mode;
+                showWallpaperSummary.run();
+            });
+        }
+        pickWallpaper.setOnClickListener(v -> {
+            if (wallpaperMode[0] == WallpaperController.MODE_OFF) return;
+            if (wallpaperMode[0] == WallpaperController.MODE_SLIDESHOW) {
+                MediaPickerDialog.pickFolder(activity, album -> {
+                    wallpaperFolder[0] = album.id;
+                    wallpaperLabel[0] = album.name;
+                    showWallpaperSummary.run();
+                });
+            } else {
+                MediaPickerDialog.pickFile(activity, entry -> {
+                    wallpaperUri[0] = entry.uri.toString();
+                    wallpaperLabel[0] = entry.name;
+                    showWallpaperSummary.run();
+                });
+            }
+        });
+        showWallpaperSummary.run();
         // Tiles per row: one of three pills, the current choice marked; applied on Save.
         int current = MainActivity.COLUMNS;
         int[] chosen = {current};
@@ -126,8 +206,12 @@ final class SettingsDialog {
         }
         View barEntry = barPills[savedHideBar ? 1 : 0];
         TextView updateStatus = panel.findViewById(R.id.updateStatus);
-        View tabGeneral = panel.findViewById(R.id.tabGeneral), tabKeys = panel.findViewById(R.id.tabKeys);
-        View pageGeneral = panel.findViewById(R.id.pageGeneral), pageKeys = panel.findViewById(R.id.pageKeys);
+        View tabGeneral = panel.findViewById(R.id.tabGeneral);
+        View tabHome = panel.findViewById(R.id.tabHome);
+        View tabKeys = panel.findViewById(R.id.tabKeys);
+        View pageGeneral = panel.findViewById(R.id.pageGeneral);
+        View pageHome = panel.findViewById(R.id.pageHome);
+        View pageKeys = panel.findViewById(R.id.pageKeys);
         View phone = panel.findViewById(R.id.phone), projectLink = panel.findViewById(R.id.projectLink);
         View updates = panel.findViewById(R.id.updates);
         View reloadBackdrops = panel.findViewById(R.id.reloadBackdrops);
@@ -135,30 +219,48 @@ final class SettingsDialog {
         // A tab shows its page as soon as it has focus, like the tabs in the TV's own apps.
         Runnable showGeneral = () -> {
             pageGeneral.setVisibility(View.VISIBLE);
+            pageHome.setVisibility(View.GONE);
             pageKeys.setVisibility(View.GONE);
             phone.setVisibility(View.GONE);
             projectLink.setVisibility(View.VISIBLE);
             updates.setVisibility(View.VISIBLE);
             tabGeneral.setSelected(true);
+            tabHome.setSelected(false);
+            tabKeys.setSelected(false);
+        };
+        Runnable showHome = () -> {
+            pageGeneral.setVisibility(View.GONE);
+            pageHome.setVisibility(View.VISIBLE);
+            pageKeys.setVisibility(View.GONE);
+            phone.setVisibility(View.GONE);
+            projectLink.setVisibility(View.GONE);
+            updates.setVisibility(View.GONE);
+            tabGeneral.setSelected(false);
+            tabHome.setSelected(true);
             tabKeys.setSelected(false);
         };
         Runnable showKeys = () -> {
             pageGeneral.setVisibility(View.GONE);
+            pageHome.setVisibility(View.GONE);
             pageKeys.setVisibility(View.VISIBLE);
             phone.setVisibility(phoneReady[0] ? View.VISIBLE : View.GONE);   // the QR code is for the keys
             projectLink.setVisibility(View.GONE);
             updates.setVisibility(View.GONE);
             tabGeneral.setSelected(false);
+            tabHome.setSelected(false);
             tabKeys.setSelected(true);
         };
-        // One height for both tabs: the frame as tall as the taller page, once it has its width.
+        // One height for all tabs: the frame as tall as the tallest page, once it has its width.
         View pages = panel.findViewById(R.id.pages);
         pages.post(() -> {
             int width = View.MeasureSpec.makeMeasureSpec(pages.getWidth(), View.MeasureSpec.EXACTLY);
             int any = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
             pageGeneral.measure(width, any);
+            pageHome.measure(width, any);
             pageKeys.measure(width, any);
-            pages.setMinimumHeight(Math.max(pageGeneral.getMeasuredHeight(), pageKeys.getMeasuredHeight()));
+            int tallest = Math.max(pageGeneral.getMeasuredHeight(),
+                    Math.max(pageHome.getMeasuredHeight(), pageKeys.getMeasuredHeight()));
+            pages.setMinimumHeight(tallest);
             // Then Check for updates level with the last setting on the left (Reload backdrops).
             pages.post(() -> {
                 View last = reloadBackdrops;
@@ -174,8 +276,10 @@ final class SettingsDialog {
             });
         });
         tabGeneral.setOnFocusChangeListener((v, focused) -> { if (focused) showGeneral.run(); });
+        tabHome.setOnFocusChangeListener((v, focused) -> { if (focused) showHome.run(); });
         tabKeys.setOnFocusChangeListener((v, focused) -> { if (focused) showKeys.run(); });
         tabGeneral.setOnClickListener(v -> columnsEntry.requestFocus());
+        tabHome.setOnClickListener(v -> weatherOpenMeteo.requestFocus());
         tabKeys.setOnClickListener(v -> tmdbInfo.requestFocus());
 
         // Text fields keep Up/Down to themselves on this TV, so steer the remote by hand. Up from the top
@@ -187,21 +291,63 @@ final class SettingsDialog {
         for (int i = 0; i < order.length; i++) {
             steer(order[i], i > 0 ? order[i - 1] : tabKeys, i < order.length - 1 ? order[i + 1] : null, save, cameFrom);
         }
+        // Home page remote order: provider pills → OWM key → city → wallpaper pills → pick.
+        View[] weatherPills = {weatherOpenMeteo, weatherOwm};
+        for (View pill : weatherPills) {
+            pill.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return tabHome.requestFocus();
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    return (WeatherService.isOpenWeatherMap(weatherProvider[0]) ? owmInfo : weatherCity).requestFocus();
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v == weatherOwm) {
+                    cameFrom[0] = v;
+                    return save.requestFocus();
+                }
+                return false;
+            });
+        }
+        steer(owmInfo, weatherOpenMeteo, owmKey, save, cameFrom);
+        steer(owmKey, owmInfo, weatherCity, save, cameFrom);
+        steer(weatherCity, owmKey, wallpaperOff, save, cameFrom);
+        for (View pill : wallpaperPills) {
+            pill.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return weatherCity.requestFocus();
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    return wallpaperMode[0] == WallpaperController.MODE_OFF || pickWallpaper.requestFocus();
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v == wallpaperSlide) {
+                    cameFrom[0] = v;
+                    return save.requestFocus();
+                }
+                return false;
+            });
+        }
+        steer(pickWallpaper, wallpaperSingle, null, save, cameFrom);
         View.OnKeyListener tabKeysNav = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;   // nothing above
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                return v == tabGeneral ? columnsEntry.requestFocus() : tmdbInfo.requestFocus();
+                if (v == tabGeneral) return columnsEntry.requestFocus();
+                if (v == tabHome) return weatherOpenMeteo.requestFocus();
+                return tmdbInfo.requestFocus();
             }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return v == tabGeneral || tabGeneral.requestFocus();
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                if (v == tabGeneral) return true;
+                if (v == tabHome) return tabGeneral.requestFocus();
+                return tabHome.requestFocus();
+            }
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                if (v == tabGeneral) return tabKeys.requestFocus();
+                if (v == tabGeneral) return tabHome.requestFocus();
+                if (v == tabHome) return tabKeys.requestFocus();
                 cameFrom[0] = v;
                 return save.requestFocus();
             }
             return false;
         };
         tabGeneral.setOnKeyListener(tabKeysNav);
+        tabHome.setOnKeyListener(tabKeysNav);
         tabKeys.setOnKeyListener(tabKeysNav);
         for (View pill : columnPills) {
             pill.setOnKeyListener((v, keyCode, event) -> {
@@ -325,6 +471,12 @@ final class SettingsDialog {
         cancel.setOnClickListener(v -> dialog.dismiss());
         save.setOnClickListener(v -> {
             saveKeys.run();
+            String owm = value(owmKey, savedOwm);
+            settings.saveWeather(weatherProvider[0], owm, weatherCity.getText().toString());
+            settings.setWallpaperMode(wallpaperMode[0]);
+            settings.setWallpaperUri(wallpaperUri[0]);
+            settings.setWallpaperFolder(wallpaperFolder[0]);
+            settings.setWallpaperLabel(wallpaperLabel[0]);
             dialog.dismiss();
             Toast.makeText(activity, R.string.saved, Toast.LENGTH_SHORT).show();
             boolean rebuild = chosen[0] != current || !chosenLanguage[0].equals(savedLanguage);
@@ -335,6 +487,7 @@ final class SettingsDialog {
                 settings.setAutoHideBar(hideBar[0]);
                 if (activity instanceof MainActivity) ((MainActivity) activity).updateTopBar();
             }
+            if (activity instanceof MainActivity) ((MainActivity) activity).onHomeSettingsSaved();
             if (rebuild) activity.recreate();   // rebuild Home with the new grid or language
         });
         dialog.show();

@@ -10,10 +10,16 @@
     <!-- Downloads the cards' artwork. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <!-- Android only reveals the Wi-Fi network's name with location; asked for on first start. -->
+    <!-- Android only reveals the Wi-Fi network's name with location; asked for on first start.
+         Location is also used as a weather fallback when the city field is empty. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Android 12+ only grants fine location when coarse is asked for with it. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Local wallpaper from the photo library / shared storage. Android may grant broader library
+         access than one folder; the app only reads images to show as the home background. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <!-- Lets the tile menu open the system uninstall confirmation. -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- Updates from the project's releases (Updater); Android still asks before installing. -->

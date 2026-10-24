@@ -169,6 +169,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private GlassView glass;
     private View ambient;
     private TextView heroName;
+    /** Large clock + weather above the dock (see widget_clock_weather). */
+    private View homeWidget;
+    private TextView weatherCity, weatherTemp, weatherDesc;
+    private TextView weatherHumidity, weatherWind, weatherPressure;
+    private ImageView weatherIcon;
+    private View weatherExtras;
+    private WeatherService weatherService;
+    private WallpaperController wallpaperController;
+    private ImageView wallpaper;
     private GradientDrawable ambientGlow;
     private int ambientColor;
     private int backdropColor;   // the focused app's glow colour, for showing its still once it's in
@@ -313,6 +322,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glass = findViewById(R.id.glass);
         ambient = findViewById(R.id.ambient);
         heroName = findViewById(R.id.heroName);
+        homeWidget = findViewById(R.id.homeWidget);
+        weatherCity = findViewById(R.id.weatherCity);
+        weatherTemp = findViewById(R.id.weatherTemp);
+        weatherDesc = findViewById(R.id.weatherDesc);
+        weatherIcon = findViewById(R.id.weatherIcon);
+        weatherExtras = findViewById(R.id.weatherExtras);
+        weatherHumidity = findViewById(R.id.weatherHumidity);
+        weatherWind = findViewById(R.id.weatherWind);
+        weatherPressure = findViewById(R.id.weatherPressure);
+        wallpaper = findViewById(R.id.wallpaper);
+        wallpaperController = new WallpaperController(this, settings, wallpaper);
+        wallpaperController.start();
+        weatherService = new WeatherService(this, settings);
+        weatherService.setListener(new WeatherService.Listener() {
+            @Override
+            public void onWeather(Weather weather) {
+                bindWeather(weather);
+            }
+
+            @Override
+            public void onWeatherError() {
+                // Keep the last good reading on screen; the next refresh will try again.
+            }
+        });
+        weatherService.start();
         backdrop = findViewById(R.id.backdrop);
         backdropImage = findViewById(R.id.backdropImage);
         backdropPrevious = findViewById(R.id.backdropPrevious);
@@ -647,6 +681,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         unregisterReceiver(screenReceiver);
         unregisterReceiver(packageReceiver);
         backdrops.close();
+        if (weatherService != null) weatherService.close();
+        if (wallpaperController != null) wallpaperController.close();
         handler.removeCallbacksAndMessages(null);
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         if (cm != null) {
@@ -802,6 +838,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         caretDock.setY(dockPanelTop - 6 * density - caretDock.getLayoutParams().height);
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
+        // Clock/weather sits above the app name; name stays in its classic spot just above the dock.
+        placeHomeWidget(dockPanelTop);
         float y = dockTopInRoot - 14 * density - 26 * density - heroName.getHeight();
         boolean changed = !label.contentEquals(heroName.getText());
 
@@ -810,6 +848,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             heroName.setY(y);
             heroName.setTranslationX(0f);
             heroName.animate().alpha(1f).setDuration(260).start();
+            showHomeWidget(true);
             heroShown = true;
         } else if (changed) {
             heroName.animate().alpha(0f).translationX(-12 * density).setDuration(120).withEndAction(() -> {
@@ -820,8 +859,35 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }).start();
         } else {
             heroName.setY(y);
+            showHomeWidget(true);
         }
         showBackdrop(adapter.packageAt(position), color);
+    }
+
+    /** Positions the clock/weather card above the dock, centred. */
+    private void placeHomeWidget(float dockTop) {
+        int w = homeWidget.getWidth();
+        int h = homeWidget.getHeight();
+        if (w == 0 || h == 0) {
+            homeWidget.measure(
+                    View.MeasureSpec.makeMeasureSpec(Math.max(1, root.getWidth()), View.MeasureSpec.AT_MOST),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            w = homeWidget.getMeasuredWidth();
+            h = homeWidget.getMeasuredHeight();
+        }
+        float x = Math.max(0, (root.getWidth() - w) / 2f);
+        float gap = 56 * density;   // room for the app name between widget and dock
+        float y = dockTop - gap - h;
+        if (y < topBar.getHeight() + 8 * density) y = topBar.getHeight() + 8 * density;
+        homeWidget.setX(x);
+        homeWidget.setY(y);
+    }
+
+    private void showHomeWidget(boolean show) {
+        if (pictureOnly || slideshow) show = false;
+        float target = show ? 1f : 0f;
+        if (Math.abs(homeWidget.getAlpha() - target) < 0.01f) return;
+        homeWidget.animate().alpha(target).setDuration(show ? 280 : 160).start();
     }
 
     /**
@@ -914,7 +980,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroShown = false;
         stillShown = false;
         heroName.animate().alpha(0f).setDuration(160).start();
+        showHomeWidget(false);
         ambient.animate().alpha(0f).setDuration(300).start();
+        // App art fades; a local wallpaper (if set) stays underneath.
         backdrop.animate().alpha(0f).setDuration(300).withLayer().start();
         backdropPkg = null;
     }
@@ -979,6 +1047,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!slideshow) openCarousel(true);
         // The name and the glass don't move with the rows: they go with the carets, before anything moves.
         heroName.animate().alpha(0f).setDuration(CARET_FADE_MS).start();
+        showHomeWidget(false);
         glass.animate().alpha(0f).setDuration(CARET_FADE_MS).start();   // the Play pill takes over
         transition(() -> Math.max(slide(rows, rowsDistance()), slide(topBar, -topBar.getHeight())));
     }
@@ -1005,7 +1074,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             topBar.animate().cancel();
             rows.setTranslationY(0f);
             topBar.setTranslationY(barWanted() ? 0f : -topBar.getHeight());
-            if (heroShown) heroName.setAlpha(1f);
+            if (heroShown) {
+                heroName.setAlpha(1f);
+                if (onDock()) {
+                    homeWidget.setAlpha(1f);
+                    placeHomeWidget(dockPanelTop);
+                }
+            }
             if (glassShown) glass.setAlpha(1f);
             updateCarets();
             return;
@@ -1085,7 +1160,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Back from the picture alone, once the rows are in place: the app's name and the tile's glass. */
     private void showName() {
         if (pictureOnly) return;   // gone back to the picture meanwhile
-        if (heroShown) heroName.animate().alpha(1f).setDuration(250).start();
+        if (heroShown) {
+            heroName.animate().alpha(1f).setDuration(250).start();
+            if (onDock()) showHomeWidget(true);
+        }
         if (glassShown && onDock()) glass.animate().alpha(1f).setDuration(250).start();
     }
 
@@ -1797,7 +1875,77 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         backdrops.reshuffle();
         backdropPkg = null;   // onResume, which follows the permission dialog, loads it again
         rebuildOnResume = true;   // the dialog only paused Home
+        if (weatherService != null) weatherService.refreshNow();
+        if (wallpaperController != null && requestCode == 3) wallpaperController.apply();
         askHomeOnce();
+    }
+
+    /**
+     * Settings → Home tab saved: refresh weather (provider/city/key) and local wallpaper without
+     * recreating the whole activity.
+     */
+    void onHomeSettingsSaved() {
+        if (weatherService != null) weatherService.refreshNow();
+        if (wallpaperController != null) wallpaperController.apply();
+    }
+
+    private void bindWeather(Weather weather) {
+        if (weather.city != null && !weather.city.isEmpty()) {
+            weatherCity.setText(weather.city);
+            weatherCity.setVisibility(View.VISIBLE);
+        } else {
+            weatherCity.setVisibility(View.GONE);
+        }
+        weatherTemp.setText(getString(R.string.temp_c, weather.temperatureC));
+        weatherDesc.setText(weather.description);
+        weatherIcon.setImageResource(weatherIconRes(weather.condition));
+        boolean extras = false;
+        if (weather.humidityPercent != null) {
+            weatherHumidity.setText(getString(R.string.weather_humidity, weather.humidityPercent));
+            weatherHumidity.setVisibility(View.VISIBLE);
+            extras = true;
+        } else {
+            weatherHumidity.setVisibility(View.GONE);
+        }
+        if (weather.windMs != null) {
+            weatherWind.setText(getString(R.string.weather_wind, weather.windMs));
+            weatherWind.setVisibility(View.VISIBLE);
+            extras = true;
+        } else {
+            weatherWind.setVisibility(View.GONE);
+        }
+        if (weather.pressureHpa != null) {
+            weatherPressure.setText(getString(R.string.weather_pressure, weather.pressureHpa));
+            weatherPressure.setVisibility(View.VISIBLE);
+            extras = true;
+        } else {
+            weatherPressure.setVisibility(View.GONE);
+        }
+        weatherExtras.setVisibility(extras ? View.VISIBLE : View.GONE);
+        if (heroShown && !pictureOnly && !slideshow) {
+            placeHomeWidget(dockPanelTop > 0 ? dockPanelTop : homeWidget.getY() + homeWidget.getHeight());
+            showHomeWidget(true);
+        }
+    }
+
+    private static int weatherIconRes(Weather.Condition condition) {
+        switch (condition) {
+            case CLEAR:
+                return R.drawable.ic_weather_clear;
+            case FOG:
+                return R.drawable.ic_weather_fog;
+            case DRIZZLE:
+            case RAIN:
+                return R.drawable.ic_weather_rain;
+            case SNOW:
+                return R.drawable.ic_weather_snow;
+            case THUNDER:
+                return R.drawable.ic_weather_thunder;
+            case CLOUDY:
+            case UNKNOWN:
+            default:
+                return R.drawable.ic_weather_cloudy;
+        }
     }
 
     /**

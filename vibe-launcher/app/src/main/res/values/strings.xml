@@ -80,4 +80,29 @@
     <string name="backdrops_reloading">Downloading new backdrops…</string>
     <string name="auto_hide_bar">Auto-hide</string>
     <string name="time_remaining">%1$s remaining</string>
+    <string name="tab_home">Home</string>
+    <string name="weather_provider">Weather</string>
+    <string name="weather_open_meteo">Open-Meteo</string>
+    <string name="weather_openweathermap">OpenWeatherMap</string>
+    <string name="owm_key">OpenWeatherMap API key</string>
+    <string name="owm_info">Current weather for the home clock. Free key: openweathermap.org → Sign up → API keys.\n\nOpen-Meteo needs no key and is the default. Choose OpenWeatherMap only when you have a key.</string>
+    <string name="weather_city">City</string>
+    <string name="weather_city_hint">Moscow (default if empty)</string>
+    <string name="wallpaper">Wallpaper</string>
+    <string name="wallpaper_single">One photo</string>
+    <string name="wallpaper_slideshow">Slideshow</string>
+    <string name="pick_wallpaper">Choose photo or folder</string>
+    <string name="pick_folder_title">Choose a folder</string>
+    <string name="pick_album_title">Choose an album</string>
+    <string name="photo_count">%1$d photos</string>
+    <string name="no_photos_found">No photos found on this TV</string>
+    <string name="photos_permission_needed">Allow photo access, then choose again</string>
+    <string name="wallpaper_none">No photo chosen yet</string>
+    <string name="wallpaper_file">Photo: %1$s</string>
+    <string name="wallpaper_folder">Folder: %1$s</string>
+    <string name="wallpaper_privacy">Photos are used only as this launcher\'s background on the TV. They are not uploaded.</string>
+    <string name="weather_humidity">%1$d%%</string>
+    <string name="weather_wind">%1$.1f m/s</string>
+    <string name="weather_pressure">%1$.0f hPa</string>
+    <string name="temp_c" translatable="false">%1$+.0f°C</string>
 </resources>

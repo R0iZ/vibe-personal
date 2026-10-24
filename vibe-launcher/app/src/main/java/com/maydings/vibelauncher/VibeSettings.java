@@ -15,6 +15,13 @@ final class VibeSettings {
     private static final String LANGUAGE = "language";
     private static final String HIDE_INACTIVE_INPUTS = "hideInactiveInputs";
     private static final String AUTO_HIDE_BAR = "autoHideBar";
+    private static final String WEATHER_PROVIDER = "weatherProvider";
+    private static final String OWM_KEY = "openWeatherMapKey";
+    private static final String WEATHER_CITY = "weatherCity";
+    private static final String WALLPAPER_MODE = "wallpaperMode";
+    private static final String WALLPAPER_URI = "wallpaperUri";
+    private static final String WALLPAPER_FOLDER = "wallpaperFolder";
+    private static final String WALLPAPER_LABEL = "wallpaperLabel";
 
     private final SharedPreferences prefs;
 
@@ -79,8 +86,86 @@ final class VibeSettings {
         prefs.edit().putBoolean(AUTO_HIDE_BAR, hide).apply();
     }
 
+    /**
+     * Weather source id: {@link WeatherService#openMeteoId()} (default, no key) or
+     * {@link WeatherService#openWeatherMapId()}.
+     */
+    String weatherProvider() {
+        return prefs.getString(WEATHER_PROVIDER, WeatherService.openMeteoId());
+    }
+
+    void setWeatherProvider(String id) {
+        prefs.edit().putString(WEATHER_PROVIDER, id == null ? WeatherService.openMeteoId() : id).apply();
+    }
+
+    /** OpenWeatherMap API key, or "" when not set. */
+    String openWeatherMapKey() {
+        return prefs.getString(OWM_KEY, "");
+    }
+
+    void setOpenWeatherMapKey(String key) {
+        prefs.edit().putString(OWM_KEY, key == null ? "" : key.trim()).apply();
+    }
+
+    /**
+     * City name for weather when location isn't available. Empty means use
+     * {@link WeatherService#DEFAULT_CITY} as the fallback.
+     */
+    String weatherCity() {
+        return prefs.getString(WEATHER_CITY, "");
+    }
+
+    void setWeatherCity(String city) {
+        prefs.edit().putString(WEATHER_CITY, city == null ? "" : city.trim()).apply();
+    }
+
+    /** {@link WallpaperController#MODE_OFF}, {@code MODE_SINGLE} or {@code MODE_SLIDESHOW}. */
+    int wallpaperMode() {
+        return prefs.getInt(WALLPAPER_MODE, WallpaperController.MODE_OFF);
+    }
+
+    void setWallpaperMode(int mode) {
+        prefs.edit().putInt(WALLPAPER_MODE, mode).apply();
+    }
+
+    /** Content or file URI of the single wallpaper image. */
+    String wallpaperUri() {
+        return prefs.getString(WALLPAPER_URI, "");
+    }
+
+    void setWallpaperUri(String uri) {
+        prefs.edit().putString(WALLPAPER_URI, uri == null ? "" : uri).apply();
+    }
+
+    /** MediaStore bucket id or filesystem path for slideshow. */
+    String wallpaperFolder() {
+        return prefs.getString(WALLPAPER_FOLDER, "");
+    }
+
+    void setWallpaperFolder(String folderId) {
+        prefs.edit().putString(WALLPAPER_FOLDER, folderId == null ? "" : folderId).apply();
+    }
+
+    /** Human-readable name of the chosen file or folder, for the settings summary. */
+    String wallpaperLabel() {
+        return prefs.getString(WALLPAPER_LABEL, "");
+    }
+
+    void setWallpaperLabel(String label) {
+        prefs.edit().putString(WALLPAPER_LABEL, label == null ? "" : label).apply();
+    }
+
     void save(String tmdbKey, String youtubeKey, String plexToken) {
         prefs.edit().putString(TMDB_KEY, tmdbKey.trim()).putString(YOUTUBE_KEY, youtubeKey.trim())
                 .putString(PLEX_TOKEN, plexToken.trim()).apply();
+    }
+
+    /** Saves weather provider, OWM key and city together (from the Home tab). */
+    void saveWeather(String provider, String owmKey, String city) {
+        prefs.edit()
+                .putString(WEATHER_PROVIDER, provider == null ? WeatherService.openMeteoId() : provider)
+                .putString(OWM_KEY, owmKey == null ? "" : owmKey.trim())
+                .putString(WEATHER_CITY, city == null ? "" : city.trim())
+                .apply();
     }
 }

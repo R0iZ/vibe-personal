@@ -6,6 +6,15 @@
     <!-- No background of its own: the window's is already black, and every full-screen paint costs
          a frame's worth of GPU fill on TV chips. -->
 
+    <!-- Local wallpaper (single image or folder slideshow). Under app backdrops; never uploaded. -->
+    <ImageView
+        android:id="@+id/wallpaper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:alpha="0"
+        android:contentDescription="@null" />
+
     <!-- Backdrop still for the focused dock app, darkened for legibility (baked in by Backdrops). -->
     <FrameLayout
         android:id="@+id/backdrop"
@@ -75,6 +84,9 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:alpha="0" />
+
+    <!-- Large clock + weather above the dock (positioned in MainActivity). -->
+    <include layout="@layout/widget_clock_weather" />
 
     <!-- Top shelf: the focused dock app's name, positioned above the dock in code. -->
     <TextView
